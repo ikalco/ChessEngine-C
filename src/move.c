@@ -92,7 +92,7 @@ void move_to_str(const struct Move *move, char *str)
 
 void str_to_move(struct Move *move, const char *str)
 {
-	if (str == NULL || strlen(str) != 4)
+	if (move == NULL || str == NULL || strlen(str) != 4)
 		abort();
 
 	move->start_file = char_to_file(str[0]);

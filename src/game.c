@@ -1,6 +1,6 @@
 #include "include/game.h"
 
-char *split_string_get_num_substring(char *string_, const char *delimiter, char **results, int results_length)
+void split_string_get_num_substring(char *string_, const char *delimiter, char **results, int results_length)
 {
 	int str_length = strlen(string_);
 	char *string = malloc(sizeof(char) * str_length);
@@ -26,14 +26,14 @@ char *split_string_get_num_substring(char *string_, const char *delimiter, char 
 		token = strtok(NULL, delimiter);
 	}
 
-	return string;
+	free(string);
 }
 
 void load_pieces_into_board(char *fen_board, struct Game *game)
 {
 	char *board_rows[8];
 
-	char *split_string = split_string_get_num_substring(fen_board, "/", board_rows, 8);
+	split_string_get_num_substring(fen_board, "/", board_rows, 8);
 
 	for (int i = 0; i < 8; i++)
 	{
@@ -46,8 +46,6 @@ void load_pieces_into_board(char *fen_board, struct Game *game)
 			init_piece(game, current_piece, &i, &j);
 		}
 	}
-
-	free(split_string);
 }
 
 void determine_active_player_color(char *active_player_color, struct Game *game)
@@ -222,7 +220,7 @@ void load_fen_string(char *fen_string, struct Game *game)
 {
 	char *deconstructed_fen_string[6];
 
-	char *split_string = split_string_get_num_substring(fen_string, " ", deconstructed_fen_string, 6);
+	split_string_get_num_substring(fen_string, " ", deconstructed_fen_string, 6);
 
 	char *fen_placement = deconstructed_fen_string[0];
 	char *active_player_color = deconstructed_fen_string[1];
@@ -244,8 +242,6 @@ void load_fen_string(char *fen_string, struct Game *game)
 	determine_fullmove_clock(fullmove_clock, game);
 
 	init_moves_history(game);
-
-	free(split_string);
 }
 
 int find_pointer(void **array, int array_size, void *element)

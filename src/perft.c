@@ -1,8 +1,8 @@
 #include "include/game.h"
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 FILE *fdopen(int fd, const char *mode);
 
@@ -80,10 +80,10 @@ void run_perft_tests()
 		printf("========== Test %d ==========\n", i);
 
 		char *deconstructed_perft_string[2];
-		char *split_string1 = split_string_get_num_substring(perft_tests[i], ";", deconstructed_perft_string, 2);
+		split_string_get_num_substring(perft_tests[i], ";", deconstructed_perft_string, 2);
 
 		char *deconstructed_perft_test_string[2];
-		char *split_string2 = split_string_get_num_substring(deconstructed_perft_string[1], "=", deconstructed_perft_test_string, 2);
+		split_string_get_num_substring(deconstructed_perft_string[1], "=", deconstructed_perft_test_string, 2);
 
 		int depth = (int)strtol(deconstructed_perft_test_string[0], NULL, 10);
 		int expected_result = (int)strtol(deconstructed_perft_test_string[1], NULL, 10);
@@ -105,8 +105,6 @@ void run_perft_tests()
 		printf("%s Test %d took: %fms\n", result == expected_result ? right : wrong, i, (elapsed_time / CLOCKS_PER_SEC) * 1000.0f);
 		results[i] = result == expected_result ? true : false;
 
-		free(split_string1);
-		free(split_string2);
 		free_game(game);
 	}
 
@@ -124,6 +122,42 @@ void run_perft_tests()
 	printf("Time to run full suite: %fms\n", (total_elapsed_time / CLOCKS_PER_SEC) * 1000.0f);
 }
 
+void parse_stockfish_perft(int pipe_read_fd)
+{
+	FILE *pipe_read = fdopen(pipe_read_fd, "w");
+
+	char line[256];
+	while (fgets(line, 256, pipe_read))
+	{
+		line[strcspn(line, "\n")] = 0;
+		int length = (int)strlen(line);
+
+		if (length < 5)
+			continue;
+
+		if (line[5] != ':')
+			continue;
+
+		char *strs[2];
+		split_string_get_num_substring(line, ":", strs, 2);
+
+		struct Move *move = malloc(sizeof(struct Move));
+		str_to_move(move, strs[0]);
+
+		int expected_result = (int)strtol(strs[1], NULL, 10);
+
+		// TODO: make this somehow align
+	}
+	fclose(pipe_read);
+}
+
+void send_stockfish_perft(char *fen_string, int depth, int pipe_write_fd)
+{
+	FILE *pipe_write = fdopen(pipe_write_fd, "w");
+	fprintf(pipe_write, "position %s\r\ngo perft %d\r\nquit\r\n", fen_string, depth);
+	fclose(pipe_write);
+}
+
 void perft_test_stockfish(char *fen_string, int depth, long expected_result)
 {
 	struct Game *game = malloc(sizeof(struct Game));
@@ -139,35 +173,34 @@ void perft_test_stockfish(char *fen_string, int depth, long expected_result)
 
 	int status;
 	pid_t pid = fork();
-	switch (pid)
+
+	if (pid == -1)
 	{
-	case -1:
 		perror("fork");
 		free_game(game);
 		abort();
-	case 0:
+	}
+	else if (pid == 0) // child
+	{
 		dup2(fd[PIPE_WRITE], STDOUT_FILENO);
 		dup2(fd[PIPE_READ], STDIN_FILENO);
 		close(fd[PIPE_READ]);
+		close(fd[PIPE_WRITE]);
 
-		char *const args[] = {"/workspaces/ChessEngine-C/stockfish", NULL};
+		char *const args[] = {"./stockfish", NULL};
 		execv(args[0], args);
-	default:
-		FILE *pipe_write = fdopen(fd[PIPE_WRITE], "w");
-		fprintf(pipe_write, "position %s\r\ngo perft %d\r\nquit\r\n", fen_string, depth);
-		fclose(pipe_write);
+	}
+	else // parent
+	{
+		send_stockfish_perft(fen_string, depth, fd[PIPE_WRITE]);
 
-		if (wait_exited_successfully(pid, &status))
-		{
-			FILE *pipe_read = fdopen(fd[PIPE_WRITE], "w");
-
-			fclose(pipe_read);
-		}
-		else
+		if (!wait_exited_successfully(pid, &status))
 		{
 			free_game(game);
 			abort();
 		}
+
+		parse_stockfish_perft(fd[PIPE_READ]);
 
 		free_game(game);
 	}

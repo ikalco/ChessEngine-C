@@ -2,6 +2,7 @@
 	"files.associations": {
 		"*.rb": "ruby",
 		"stdio.h": "c",
-		"stdio_ext.h": "c"
+		"stdio_ext.h": "c",
+		"string.h": "c"
 	}
 }

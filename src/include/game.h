@@ -50,7 +50,7 @@ void multiple_moves_game(struct Game *game, int num_moves, ...);
 void move_game(struct Game *game, struct Move *move);
 void unmove_game(struct Game *game);
 
-char *split_string_get_num_substring(char *string, const char *delimiter, char **results, int results_length);
+void split_string_get_num_substring(char *string, const char *delimiter, char **results, int results_length);
 void load_fen_string(char *fen_string, struct Game *game);
 
 void game_export(struct Game *game);
