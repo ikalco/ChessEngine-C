@@ -1,0 +1,7 @@
+{
+	"files.associations": {
+		"*.rb": "ruby",
+		"stdio.h": "c",
+		"stdio_ext.h": "c"
+	}
+}
