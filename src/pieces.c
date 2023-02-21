@@ -395,7 +395,6 @@ void generate_knight_moves(struct Game *game, struct Piece *knight, struct Move 
 		{
 			continue;
 		}
-		// printf("%d\n", file);
 
 		bool valid_move = false;
 

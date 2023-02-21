@@ -1,6 +1,6 @@
 #include "include/game.h"
 
-void split_string_get_num_substring(char *string_, const char *delimiter, char **results, int results_length)
+char *split_string_get_num_substring(char *string_, const char *delimiter, char **results, int results_length)
 {
 	int str_length = strlen(string_);
 	char *string = malloc(sizeof(char) * str_length);
@@ -26,14 +26,14 @@ void split_string_get_num_substring(char *string_, const char *delimiter, char *
 		token = strtok(NULL, delimiter);
 	}
 
-	free(string);
+	return string;
 }
 
 void load_pieces_into_board(char *fen_board, struct Game *game)
 {
 	char *board_rows[8];
 
-	split_string_get_num_substring(fen_board, "/", board_rows, 8);
+	char *split_str = split_string_get_num_substring(fen_board, "/", board_rows, 8);
 
 	for (int i = 0; i < 8; i++)
 	{
@@ -46,6 +46,8 @@ void load_pieces_into_board(char *fen_board, struct Game *game)
 			init_piece(game, current_piece, &i, &j);
 		}
 	}
+
+	free(split_str);
 }
 
 void determine_active_player_color(char *active_player_color, struct Game *game)
@@ -213,14 +215,14 @@ void init_moves_history(struct Game *game)
 	}
 
 	*game->moves_history_size = 8;
-	*game->moves_history = malloc(sizeof(struct Move *) * (*game->moves_history_size));
+	*game->moves_history = calloc(*game->moves_history_size, sizeof(struct Move *));
 }
 
 void load_fen_string(char *fen_string, struct Game *game)
 {
 	char *deconstructed_fen_string[6];
 
-	split_string_get_num_substring(fen_string, " ", deconstructed_fen_string, 6);
+	char *split_str = split_string_get_num_substring(fen_string, " ", deconstructed_fen_string, 6);
 
 	char *fen_placement = deconstructed_fen_string[0];
 	char *active_player_color = deconstructed_fen_string[1];
@@ -242,6 +244,8 @@ void load_fen_string(char *fen_string, struct Game *game)
 	determine_fullmove_clock(fullmove_clock, game);
 
 	init_moves_history(game);
+
+	free(split_str);
 }
 
 int find_pointer(void **array, int array_size, void *element)
@@ -388,23 +392,22 @@ void move_game(struct Game *game, struct Move *move)
 
 void unmove_game(struct Game *game)
 {
-	struct Move **move = malloc(sizeof(struct Move *));
-	pop_move_array(game->moves_history, game->moves_history_size, move);
+	struct Move *move = malloc(sizeof(struct Move));
+	pop_move_array(game->moves_history, game->moves_history_size, &move);
 	if (move == NULL)
 	{
 		abort(); // exit_game(game, MEMORY_FAILURE);
 	}
 
-	free(game->board[(*move)->start_rank][(*move)->start_file]);
-	game->board[(*move)->start_rank][(*move)->start_file] = game->board[(*move)->target_rank][(*move)->target_file];
-	game->board[(*move)->start_rank][(*move)->start_file]->moved = game->board[(*move)->start_rank][(*move)->start_file]->prev_moved;
-	game->board[(*move)->start_rank][(*move)->start_file]->file = (*move)->start_file;
-	game->board[(*move)->start_rank][(*move)->start_file]->rank = (*move)->start_rank;
+	free(game->board[move->start_rank][move->start_file]);
+	game->board[move->start_rank][move->start_file] = game->board[move->target_rank][move->target_file];
+	game->board[move->start_rank][move->start_file]->moved = game->board[move->start_rank][move->start_file]->prev_moved;
+	game->board[move->start_rank][move->start_file]->file = move->start_file;
+	game->board[move->start_rank][move->start_file]->rank = move->start_rank;
 
-	add_to_piece_array(game, (*move)->removed_piece);
-	game->board[(*move)->target_rank][(*move)->target_file] = (*move)->removed_piece;
+	add_to_piece_array(game, move->removed_piece);
+	game->board[move->target_rank][move->target_file] = move->removed_piece;
 
-	free(*move);
 	free(move);
 
 	game->active_player_color = game->active_player_color == White ? Black : White;
@@ -458,6 +461,68 @@ int game_perft_divide(struct Game *game, int depth)
 		unmove_game(game);
 
 		printf("%s: %d\n", move_str, result);
+		num_of_positions += result;
+	}
+
+	printf("=================================\n");
+	printf("Total amount of moves: %d\n", num_of_positions);
+
+	return num_of_positions;
+}
+
+bool result_matches_expected_result(struct Move *move, int result, struct ExpectedMove ***emarray, int *emarray_size)
+{
+	for (int i = 0; i < *emarray_size; i++)
+	{
+		struct Move *emove = &(*emarray)[i]->move;
+		// same move
+		if (move->start_file == emove->start_file && move->start_rank == emove->start_rank && move->target_file == emove->target_file && move->target_rank == emove->target_rank)
+		{
+			// same result
+			if ((*emarray)[i]->expected_result == result)
+				return true;
+
+			// different result
+			char move_str[5];
+			move_to_str(move, move_str);
+			printf("(%s) Expected: %d | Got: %d\n", move_str, (*emarray)[i]->expected_result, result);
+			return false;
+		}
+	}
+
+	return false;
+}
+
+int game_perft_divide_debug(struct Game *game, int depth, struct ExpectedMove ***emarray, int *emarray_size)
+{
+	printf("Perft Divide (depth = %d)\n", depth);
+	printf("========== Moves ==========\n");
+
+	int num_of_positions = 0;
+
+	struct Move ***moves = malloc(sizeof(struct Move **));
+	int *moves_size = malloc(sizeof(int));
+	generate_moves(game, moves, moves_size);
+
+	int *results = malloc(sizeof(int) * *moves_size);
+
+	char move_str[5];
+	for (int i = 0; i < *moves_size; i++)
+	{
+		struct Move *move = (*moves)[i];
+		move_to_str(move, move_str);
+
+		move_game(game, move);
+		int result = game_perft_bulk(game, depth - 1);
+		unmove_game(game);
+
+		if (!result_matches_expected_result(move, result, emarray, emarray_size))
+		{
+			break;
+		}
+
+		printf("%s: %d\n", move_str, result);
+		results[i] = result;
 		num_of_positions += result;
 	}
 

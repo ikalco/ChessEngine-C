@@ -9,6 +9,16 @@ FILE *fdopen(int fd, const char *mode);
 #define PIPE_READ 0
 #define PIPE_WRITE 1
 
+bool numeric(char c)
+{
+	return (c >= '0' && c <= '9');
+}
+
+bool alpha(char c)
+{
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+}
+
 bool wait_exited_successfully(int pid, int *status)
 {
 	if (waitpid(pid, status, 0) > 0)
@@ -80,10 +90,10 @@ void run_perft_tests()
 		printf("========== Test %d ==========\n", i);
 
 		char *deconstructed_perft_string[2];
-		split_string_get_num_substring(perft_tests[i], ";", deconstructed_perft_string, 2);
+		char *split_str1 = split_string_get_num_substring(perft_tests[i], ";", deconstructed_perft_string, 2);
 
 		char *deconstructed_perft_test_string[2];
-		split_string_get_num_substring(deconstructed_perft_string[1], "=", deconstructed_perft_test_string, 2);
+		char *split_str2 = split_string_get_num_substring(deconstructed_perft_string[1], "=", deconstructed_perft_test_string, 2);
 
 		int depth = (int)strtol(deconstructed_perft_test_string[0], NULL, 10);
 		int expected_result = (int)strtol(deconstructed_perft_test_string[1], NULL, 10);
@@ -106,6 +116,8 @@ void run_perft_tests()
 		results[i] = result == expected_result ? true : false;
 
 		free_game(game);
+		free(split_str1);
+		free(split_str2);
 	}
 
 	double result = 0;
@@ -122,33 +134,87 @@ void run_perft_tests()
 	printf("Time to run full suite: %fms\n", (total_elapsed_time / CLOCKS_PER_SEC) * 1000.0f);
 }
 
-void parse_stockfish_perft(int pipe_read_fd)
+int parse_stockfish_perft(int pipe_read_fd, struct ExpectedMove ***emarray, int *emarray_size)
 {
-	FILE *pipe_read = fdopen(pipe_read_fd, "w");
+	FILE *pipe_read = fdopen(pipe_read_fd, "r");
+
+	int expected_result = -1;
 
 	char line[256];
 	while (fgets(line, 256, pipe_read))
 	{
-		line[strcspn(line, "\n")] = 0;
-		int length = (int)strlen(line);
-
+		int length = (int)strcspn(line, "\n") + 1;
 		if (length < 5)
 			continue;
 
-		if (line[5] != ':')
+		// replace newline with string null terminate
+		line[--length] = 0;
+
+		if (line[0] == 'N' && line[14] == ':')
+		{
+			bool next = false;
+			for (int i = 16; i < length; i++)
+			{
+				if (!numeric(line[i]))
+				{
+					next = true;
+					break;
+				}
+			}
+
+			if (next)
+				abort();
+
+			char *strs[2];
+			char *split_str = split_string_get_num_substring(line, ":", strs, 2);
+
+			expected_result = (int)strtol(strs[1], NULL, 10);
+
+			free(split_str);
+
+			continue;
+		}
+
+		if (line[4] != ':')
 			continue;
 
+		if (line[5] != ' ')
+			continue;
+
+		// if the first 4 chars are in the shape of a move ea. g1h3, g1f3
+		if (alpha(line[0]) && numeric(line[1]) && alpha(line[2]) && numeric(line[3]))
+		{
+			// make sure the rest of the string is a number
+			bool next = false;
+			for (int i = 6; i < length; i++)
+			{
+				if (!numeric(line[i]))
+				{
+					next = true;
+					break;
+				}
+			}
+
+			if (next)
+				continue;
+		}
+
+		struct ExpectedMove *expected_move = add_expected_move_array(emarray, emarray_size);
+
 		char *strs[2];
-		split_string_get_num_substring(line, ":", strs, 2);
+		char *split_str = split_string_get_num_substring(line, ":", strs, 2);
 
-		struct Move *move = malloc(sizeof(struct Move));
-		str_to_move(move, strs[0]);
+		str_to_move(&expected_move->move, strs[0]);
+		expected_move->expected_result = (int)strtol(strs[1], NULL, 10);
 
-		int expected_result = (int)strtol(strs[1], NULL, 10);
-
-		// TODO: make this somehow align
+		free(split_str);
 	}
+
+	downsize_expected_move_array(emarray, emarray_size);
+
 	fclose(pipe_read);
+
+	return expected_result;
 }
 
 void send_stockfish_perft(char *fen_string, int depth, int pipe_write_fd)
@@ -158,16 +224,27 @@ void send_stockfish_perft(char *fen_string, int depth, int pipe_write_fd)
 	fclose(pipe_write);
 }
 
-void perft_test_stockfish(char *fen_string, int depth, long expected_result)
+void get_stockfish_perft(char *fen_string, int depth, int *expected_result, struct ExpectedMove ***emarray, int *emarray_size)
 {
-	struct Game *game = malloc(sizeof(struct Game));
-	load_fen_string(fen_string, game);
+	if (emarray == NULL || *emarray == NULL || emarray_size == NULL)
+		abort();
+
+	for (int i = 0; i < *emarray_size; i++)
+	{
+		if ((*emarray)[i] != NULL)
+			free((*emarray)[i]);
+		else
+			break;
+
+		(*emarray)[i] = NULL;
+	}
+
+	*emarray_size = 2;
+	*emarray = realloc(*emarray, sizeof(struct ExpectedMove *) * *emarray_size);
 
 	int fd[2];
-	if (pipe(fd))
+	if (pipe(fd) == -1)
 	{
-		perror("pipe");
-		free_game(game);
 		abort();
 	}
 
@@ -176,8 +253,6 @@ void perft_test_stockfish(char *fen_string, int depth, long expected_result)
 
 	if (pid == -1)
 	{
-		perror("fork");
-		free_game(game);
 		abort();
 	}
 	else if (pid == 0) // child
@@ -196,12 +271,9 @@ void perft_test_stockfish(char *fen_string, int depth, long expected_result)
 
 		if (!wait_exited_successfully(pid, &status))
 		{
-			free_game(game);
 			abort();
 		}
 
-		parse_stockfish_perft(fd[PIPE_READ]);
-
-		free_game(game);
+		*expected_result = parse_stockfish_perft(fd[PIPE_READ], emarray, emarray_size);
 	}
 }

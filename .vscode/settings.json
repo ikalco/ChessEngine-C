@@ -3,6 +3,8 @@
 		"*.rb": "ruby",
 		"stdio.h": "c",
 		"stdio_ext.h": "c",
-		"string.h": "c"
+		"string.h": "c",
+		"game.h": "c",
+		"perft.h": "c"
 	}
 }

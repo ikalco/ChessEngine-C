@@ -50,7 +50,7 @@ void multiple_moves_game(struct Game *game, int num_moves, ...);
 void move_game(struct Game *game, struct Move *move);
 void unmove_game(struct Game *game);
 
-void split_string_get_num_substring(char *string, const char *delimiter, char **results, int results_length);
+char *split_string_get_num_substring(char *string, const char *delimiter, char **results, int results_length);
 void load_fen_string(char *fen_string, struct Game *game);
 
 void game_export(struct Game *game);
@@ -59,3 +59,4 @@ void free_game(struct Game *game);
 
 int game_perft_bulk(struct Game *game, int depth);
 int game_perft_divide(struct Game *game, int depth);
+int game_perft_divide_debug(struct Game *game, int depth, struct ExpectedMove ***emarray, int *emarray_size);

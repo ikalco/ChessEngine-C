@@ -213,6 +213,134 @@ void pop_move_array(struct Move ***array, int *array_size, struct Move **move)
 	}
 }
 
+struct ExpectedMove *add_expected_move_array(struct ExpectedMove ***array, int *array_size)
+{
+	int size = *array_size;
+	for (int j = 0; j < size; j++)
+	{
+		if ((*array)[j] == NULL)
+		{
+			(*array)[j] = malloc(sizeof(struct ExpectedMove));
+			return (*array)[j];
+		}
+		else if (j == size - 1)
+		{
+			size *= 2;
+
+			(*array) = realloc((*array), size * (sizeof(struct ExpectedMove *)));
+
+			int j = *array_size;
+
+			for (int k = j; k < size; k++)
+			{
+				(*array)[k] = NULL;
+			}
+
+			(*array)[j] = malloc(sizeof(struct ExpectedMove));
+
+			*array_size = size;
+			return (*array)[j];
+		}
+	}
+
+	return NULL;
+}
+
+void push_expected_move_array(struct ExpectedMove ***array, int *array_size, struct ExpectedMove *move)
+{
+	int size = *array_size;
+
+	if (size == 0)
+	{
+		size *= 2;
+
+		(*array) = realloc((*array), size * (sizeof(struct ExpectedMove *)));
+
+		int j = *array_size;
+
+		for (int k = j; k < size; k++)
+		{
+			(*array)[k] = NULL;
+		}
+
+		(*array)[j] = move;
+
+		*array_size = size;
+		return;
+	}
+
+	for (int j = 0; j < size; j++)
+	{
+		if ((*array)[j] == NULL)
+		{
+			(*array)[j] = move;
+			return;
+		}
+		else if (j == size - 1)
+		{
+			size *= 2;
+
+			(*array) = realloc((*array), size * (sizeof(struct ExpectedMove *)));
+
+			int j = *array_size;
+
+			for (int k = j; k < size; k++)
+			{
+				(*array)[k] = NULL;
+			}
+
+			(*array)[j] = move;
+
+			*array_size = size;
+			return;
+		}
+	}
+
+	abort(); // exit_game(game, MEMORY_FAILURE);
+}
+
+void pop_expected_move_array(struct ExpectedMove ***array, int *array_size, struct ExpectedMove **move)
+{
+	if (*array_size < 1)
+		return;
+
+	int size = *array_size;
+
+	for (int i = 0; i < size; i++)
+	{
+		if ((*array)[i] != NULL)
+			continue;
+
+		if (i != 0)
+		{
+			*move = (*array)[i - 1];
+			(*array)[i - 1] = NULL;
+			return;
+		}
+		else
+		{
+			move = NULL;
+		}
+	}
+}
+
+void downsize_expected_move_array(struct ExpectedMove ***array, int *array_size)
+{
+	int i;
+	int size = *array_size;
+	for (i = 0; i < size; i++)
+	{
+		struct ExpectedMove *emove = (*array)[i];
+		if (emove == NULL)
+		{
+			break;
+		}
+	}
+
+	*array_size = i + 1;
+	*array = realloc((*array), sizeof(struct ExpectedMove *) * (*array_size));
+}
+
 void filter_moves_array_by_color(struct Game *game, enum Color color, struct Move ***array, int *array_size)
 {
 	int size = *array_size;
